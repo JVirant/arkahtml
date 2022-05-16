@@ -1,0 +1,21 @@
+{
+	"compilerOptions": {
+		"module": "CommonJS",
+		"moduleResolution": "Node",
+		"target": "ES6",
+		"strict": true,
+		"lib": ["ES2017", "DOM"],
+	},
+	"include": [
+		"src/**/*",
+	],
+	"exclude": [
+		"dist/**",
+		"**/node_modules/**",
+	],
+	"ts-node": {
+		"compilerOptions": {
+			"module": "CommonJS"
+		}
+	}
+}

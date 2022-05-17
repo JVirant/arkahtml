@@ -3,7 +3,7 @@ import { resolve } from "path";
 
 const config: Configuration = {
 	mode: `production`,
-	entry: `./src/arkahtml.ts`,
+	entry: `./src/main.ts`,
 	output: {
 		path: resolve(__dirname, 'dist'),
 		filename: 'bundle.js',

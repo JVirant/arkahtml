@@ -1,4 +1,8 @@
-import { Vec2, Rect, Circle, add, collideCR, collideRR, distance } from "./utils";
+import { CPlayer } from "./CPlayer";
+import { State } from "./main";
+import { GAClogo, GAClogo2 } from "./map";
+import { bump, song } from "./songs";
+import { Vec2, Rect, Circle, add, collideCR, collideRR, distance, cloneDeep, rand } from "./utils";
 
 enum BallState {
 	Dead = 0,
@@ -75,6 +79,8 @@ function updateBall(ball: Ball) {
 			const doCollision = (r: Rect) => {
 				const res = collideCR(ball.circle, r);
 				if (res) {
+					audioBump[audioBumpIdx].play();
+					audioBumpIdx = (audioBumpIdx + 1) % audioBump.length;
 					ball.vel = new Vec2(ball.vel.x * (res & 0xF0 ? -1 : 1), ball.vel.y * (res & 0x0F ? -1 : 1));
 					score += ball.combo;
 					ball.combo += 1;
@@ -118,8 +124,8 @@ class Paddle {
 		this.el = document.createElement("div");
 		this.el.style.width = `128px`;
 		this.el.style.height = `24px`;
-		this.el.style.background = `yellow`;
-		this.el.style.border = `outset 5px black`;
+		this.el.style.background = `linear-gradient(0deg, #944611 0%, #db8951 100%)`;
+		this.el.style.border = `outset 3px black`;
 		this.el.style.borderRadius = `5px`;
 		this.el.style.position = `absolute`;
 		this.el.style.bottom = `16px`;
@@ -127,12 +133,12 @@ class Paddle {
 		this.el.style.zIndex = `10001`;
 		this.el.style.boxShadow = `8px 8px #00000080`;
 		this.el.style.textAlign = "center";
-		this.el.style.font = "12px monospace";
+		this.el.style.font = "14px monospace";
 		container.appendChild(this.el);
 	}
 }
-function updatePaddle(paddle: Paddle) {
-	const x = Math.min(screenSize.x - 64, mousePos.x - 64);
+function updatePaddle(paddle: Paddle, state: State) {
+	const x = Math.min(screenSize.x - 64, state.mouse.pos.x - 64);
 	paddle.pos = new Vec2(x, screenSize.y - 16 - 24);
 	paddle.el.textContent = score.toString().padStart(4, "0");
 }
@@ -161,9 +167,69 @@ function refreshElements() {
 	//elements.forEach(e => e.style.border = `1px red solid`);
 }
 
-export function init() {
+let oldState: State | undefined = undefined;
+function updateGame() {
+	balls.forEach(updateBall);
+	refreshElements();
+
+	if (elements.length === 0) {
+		alert(`Bien joué !\nScore: ${score}`);
+		return false;
+	}
+	else if (balls.every(b => b.state === BallState.Dead)) {
+		alert(`GAME OVER\n\nScore: ${score}`);
+		document.location = document.location;
+		return false;
+	}
+	return true;
+}
+
+function updateFromState(state: State) {
+	updatePaddle(paddle, state);
+	if (oldState?.mouse?.buttonLeftDown && !state.mouse.buttonLeftDown) {
+		if (!audioSong) {
+			console.log("start audio");
+			const wave = playerSong?.createWave();
+			audioSong = document.createElement("audio");
+			audioSong.src = URL.createObjectURL(new Blob([wave], { type: "audio/wav" }));
+			audioSong.loop = true;
+			audioSong.play();
+
+			const waveBump = playerBump?.createWave();
+			const bump = document.createElement("audio");
+			bump.src = URL.createObjectURL(new Blob([waveBump], { type: "audio/wav" }));
+			for (let i = 0; i < 8; ++i)
+				audioBump.push(bump.cloneNode(true) as HTMLAudioElement);
+		}
+
+		const ball = balls.find(b => b.state === BallState.Waiting);
+		if (ball)
+			ball.state = BallState.Alive;
+	}
+}
+
+const container = document.body;
+
+let time = Date.now();
+let score = 0;
+
+let background!: HTMLDivElement;
+const balls: Ball[] = [];
+const paddle: Paddle = new Paddle();
+let screenSize: Vec2 = new Vec2();
+let bottom: number = 0;
+let elements: HTMLElement[] = [];
+let level = 1;
+
+let playerSong: CPlayer | undefined = undefined;
+let audioSong: HTMLAudioElement | undefined = undefined;
+let playerBump: CPlayer | undefined = undefined;
+const audioBump: HTMLAudioElement[] = [];
+let audioBumpIdx = 0;
+
+export async function start(state: State) {
 	screenSize = new Vec2(document.body.clientWidth, document.body.clientHeight);
-	bottom = Math.max(80, (screenSize.y * 80 / 100) | 0);
+	bottom = Math.max(80, (screenSize.y * 90 / 100) | 0);
 
 	background = document.createElement("div");
 	background.style.position = "fixed";
@@ -171,38 +237,95 @@ export function init() {
 	background.style.height = `100vh`;
 	background.style.zIndex = "10000";
 	document.body.prepend(background);
-	document.onresize = () => {
-		screenSize = new Vec2(container.clientWidth, container.clientHeight);
-		bottom = Math.max(80, (screenSize.y * 80 / 100) | 0);
-		background.style.width = `${screenSize.x}px`;
-		background.style.height = `${screenSize.y}px`;
-	};
-
-	background.onmousemove = (ev) => {
-		mousePos = new Vec2(ev.clientX, ev.clientY);
-	};
-	background.onmouseup = (ev) => {
-		const ball = balls.find(b => b.state === BallState.Waiting);
-		if (ball)
-			ball.state = BallState.Alive;
-	}
 
 	refreshElements();
 	balls.push(new Ball());
 	balls[0].pos = new Vec2(20, 20);
 
+	playerSong = new CPlayer();
+	playerSong.init(song);
+	while (playerSong.generate() < 1)
+		await new Promise(r => setTimeout(r, 1));
+
+	playerBump = new CPlayer();
+	playerBump.init(bump);
+	while (playerBump.generate() < 1)
+		await new Promise(r => setTimeout(r, 1));
+
 	console.log(`init Arkahtml`, elements);
-/*
+	//*
 	elements.forEach(el => el.remove());
 	refreshElements();
 	elements.forEach(el => el.remove());
 	refreshElements();
 	elements.forEach(el => el.remove());
 	refreshElements();
-*/
+	/**/
 }
 
-const createBrick = (x: number, y: number, w = 2) => {
+export function update(state: State): boolean {
+	try {
+		const oldTime = time;
+
+		if (state.screen.resized) {
+			screenSize = new Vec2(container.clientWidth, container.clientHeight);
+			bottom = Math.max(80, (screenSize.y * 90 / 100) | 0);
+			background.style.width = `${screenSize.x}px`;
+			background.style.height = `${screenSize.y}px`;
+		}
+
+		console.log(screenSize);
+
+		time = Date.now();
+		let elapsedTime = time - oldTime;
+		if (elapsedTime >= 8)
+			updateFromState(state);
+		while (elapsedTime >= 8) {
+			if (!updateGame()) {
+				if (level === 1 && screenSize.x > 1550 && screenSize.y > 650) {
+					level++;
+					const { bricks, bounds } = _createMap(rand(1, 2) % 2 ? GAClogo : GAClogo2);
+					const translation = new Vec2(screenSize.x / 2 - bounds.size.x / 2, Math.max(0, screenSize.y / 2 - bounds.size.y / 2 - 128));
+					bricks.map(brick => {
+						const div = _createBrick(brick.tl.x + translation.x, brick.tl.y + translation.y, brick.size.x);
+						container.append(div);
+					});
+					balls.forEach(b => {
+						b.state = BallState.Waiting;
+						b.combo = 1;
+					});
+					refreshElements();
+					break;
+				}
+				return false;
+			}
+			elapsedTime -= 8;
+		}
+		return true;
+	}
+	finally {
+		oldState = cloneDeep(state);
+	}
+}
+
+export async function stop() {
+	audioSong?.pause();
+	audioSong = undefined;
+	playerSong = undefined;
+	playerBump = undefined;
+	audioBump.forEach(b => b.pause());
+
+	paddle.el.remove();
+	background.remove();
+	balls.forEach(b => b.el.remove());
+	balls.length = 0;
+	elements.forEach(e => e.remove());
+	elements.length = 0;
+}
+
+
+
+function _createBrick(x: number, y: number, w = 2) {
 	const div = document.createElement("div");
 	div.style.zIndex = "10000";
 	div.style.width = `${w}px`;
@@ -216,7 +339,7 @@ const createBrick = (x: number, y: number, w = 2) => {
 	return div;
 };
 
-function createMap(map: string) {
+function _createMap(map: string) {
 	const bricks: Rect[] = [];
 	map.split("\n").map((line, row) => {
 		const y = row * 32;
@@ -233,68 +356,4 @@ function createMap(map: string) {
 		bricks,
 		bounds: new Rect(new Vec2(0, 0), new Vec2(Math.max(...bricks.map(b => b.br.x)), map.length * 32)),
 	};
-}
-
-function updateGame() {
-	updatePaddle(paddle);
-	balls.forEach(updateBall);
-	refreshElements();
-	if (elements.length === 0) {
-		alert(`Score: ${score}`);
-		return false;
-	}
-	else if (balls.every(b => b.state === BallState.Dead)) {
-		alert(`Game over`);
-		document.location = document.location;
-		return false;
-	}
-	return true;
-}
-
-const container = document.body;
-
-let scaling = 1;
-let time = Date.now();
-let score = 0;
-const callback = (us: number) => {
-	const oldTime = time;
-	time = Date.now();
-	let elapsedTime = time - oldTime;
-	while (elapsedTime >= 8) {
-		if (!updateGame()) {
-			elapsedTime = 0;
-			time = Date.now();
-			score = 0;
-			balls.forEach(b => b.el.remove());
-			balls.splice(0, balls.length);
-			balls.push(new Ball());
-			balls[0].pos = new Vec2(20, 20);
-
-			const { bricks, bounds } = createMap(rand() % 2 ? GAClogo : GAClogo2);
-			const translation = new Vec2(screenSize.x / 2 - bounds.size.x / 2, Math.max(0, screenSize.y / 2 - bounds.size.y / 2 - 128));
-			bricks.map(brick => {
-				const div = createBrick(brick.tl.x + translation.x, brick.tl.y + translation.y, brick.size.x);
-				container.append(div);
-			});
-			refreshElements();
-			break;
-		}
-		elapsedTime -= 8;
-	}
-	requestAnimationFrame(callback);
-};
-
-let background!: HTMLDivElement;
-const balls: Ball[] = [];
-const paddle: Paddle = new Paddle();
-let screenSize: Vec2 = new Vec2();
-let bottom: number = 0;
-let mousePos: Vec2 = new Vec2();
-let elements: HTMLElement[] = [];
-
-init();
-requestAnimationFrame(callback);
-
-function rand() {
-	return (Math.random() * 2 ** 32) | 0;
 }

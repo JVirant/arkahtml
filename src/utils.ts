@@ -30,7 +30,7 @@ export class Rect {
 	get br() {
 		return add(this.tl, this.size);
 	}
-	
+
 
 	constructor(pos: Vec2, size: Vec2) {
 		this.tl = pos;
@@ -76,4 +76,24 @@ export function collideCR(c: Circle, r: Rect): Side | undefined {
 export function distance(a: Vec2, b: Vec2) {
 	const d = add(a, inverse(b));
 	return Math.sqrt(d.x * d.x + d.y * d.y);
+}
+
+export function rand(min: number, max: number) {
+	return min + (Math.random() * (max + 1 - min) | 0);
+}
+
+export function lerp(a: number, b: number, x: number) {
+	return a + (b - a) * x;
+}
+
+export function cloneDeep<T extends unknown>(value: T): T {
+	const obj: unknown = value;
+	if (typeof(obj) === "object") {
+		if (obj == null)
+			return value;
+		if (Array.isArray(obj))
+			return obj.map(o => cloneDeep(o)) as T;
+		return Object.fromEntries(Object.entries(obj).map(([prop, value]) => [prop, cloneDeep(value)])) as T;
+	}
+	return value;
 }

@@ -11,7 +11,7 @@ enum BallState {
 }
 
 class Ball {
-	vel = new Vec2(0, -3);
+	vel = new Vec2(1, -3);
 	el!: HTMLElement;
 	state: BallState = BallState.Waiting;
 	combo = 1;
@@ -26,7 +26,7 @@ class Ball {
 	}
 
 	get circle() {
-		return new Circle(this.pos, 8);
+		return new Circle(add(this.pos, new Vec2(8, 8)), 8);
 	}
 	get rect() {
 		const rect = this.el.getBoundingClientRect();
@@ -163,8 +163,6 @@ function refreshElements() {
 	elements = elements.filter(e => {
 		return !Array.from(e.children).some(e => e instanceof HTMLElement && elements.includes(e));
 	});
-	//elements.forEach(e => e.style.boxShadow = `8px 8px #00000080`);
-	//elements.forEach(e => e.style.border = `1px red solid`);
 }
 
 let oldState: State | undefined = undefined;
@@ -242,18 +240,37 @@ export async function start(state: State) {
 	balls.push(new Ball());
 	balls[0].pos = new Vec2(20, 20);
 
+	const $loadingBar = document.createElement("div");
+	$loadingBar.style.position = "fixed";
+	$loadingBar.style.width = "256px";
+	$loadingBar.style.height = "32px";
+	$loadingBar.style.top = `${screenSize.y / 2 - 16}px`;
+	$loadingBar.style.left = `${screenSize.x / 2 - 128}px`;
+	$loadingBar.style.zIndex = "15000";
+	$loadingBar.style.border = "1px solid black";
+	const progress = (ratio: number) => {
+		ratio = (ratio * 100) | 0;
+		$loadingBar.style.background = `linear-gradient(90deg, #3D8D3D 0%, #3D8D3D ${ratio}%, #3D3D3D ${ratio}%, #3D3D3D 100%)`;
+		return ratio;
+	};
+	progress(0);
+	document.body.append($loadingBar);
+	await new Promise(r => setTimeout(r, 15));
+
 	playerSong = new CPlayer();
 	playerSong.init(song);
-	while (playerSong.generate() < 1)
-		await new Promise(r => setTimeout(r, 1));
+	while (progress(playerSong.generate()) < 1)
+		await new Promise(r => setTimeout(r, 15));
 
 	playerBump = new CPlayer();
 	playerBump.init(bump);
 	while (playerBump.generate() < 1)
-		await new Promise(r => setTimeout(r, 1));
+		await new Promise(r => setTimeout(r, 15));
 
+	progress(1);
+	$loadingBar.remove();
 	console.log(`init Arkahtml`, elements);
-	//*
+	/*
 	elements.forEach(el => el.remove());
 	refreshElements();
 	elements.forEach(el => el.remove());
